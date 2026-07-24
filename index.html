@@ -186,7 +186,7 @@ const QTIME = 20;
 <script>
 const app = document.getElementById('app');
 let currentPlanet = null;
-let session = { nombre:'', grupo:'', qIndex:0, puntaje:0 };
+let session = { nombre:'', grupo:'', qIndex:0, puntaje:0, detalle:[] };
 let timerHandle = null;
 
 function setAccent(hex){
@@ -235,7 +235,13 @@ async function setEstado(pid, v){
   return true;
 }
 async function saveResponse(pid, entry){
-  const r = await apiPost({ action:'save', nombre: entry.nombre, grupo: entry.grupo, planeta: pid, puntaje: entry.puntaje });
+  const d = entry.detalle || [];
+  const body = {
+    action:'save', nombre: entry.nombre, grupo: entry.grupo, planeta: pid, puntaje: entry.puntaje,
+    p1_pregunta: d[0] ? d[0].pregunta : '', p1_respuesta: d[0] ? d[0].respuesta : '', p1_correcta: d[0] ? d[0].correcta : '', p1_tiempo: d[0] ? d[0].tiempo : '',
+    p2_pregunta: d[1] ? d[1].pregunta : '', p2_respuesta: d[1] ? d[1].respuesta : '', p2_correcta: d[1] ? d[1].correcta : '', p2_tiempo: d[1] ? d[1].tiempo : ''
+  };
+  const r = await apiPost(body);
   if(!r || !r.ok){ showToast('⚠ No se pudo guardar tu resultado, intenta de nuevo', 'err'); return false; }
   showToast('✓ Resultado guardado', 'ok');
   return true;
@@ -345,7 +351,7 @@ function renderIdentity(){
   nameInput.addEventListener('input', checkReady);
   function checkReady(){ document.getElementById('startBtn').disabled = !(nameInput.value.trim().length>1 && selGrp); }
   document.getElementById('startBtn').onclick = ()=>{
-    session = { nombre: nameInput.value.trim(), grupo: selGrp, qIndex:0, puntaje:0 };
+    session = { nombre: nameInput.value.trim(), grupo: selGrp, qIndex:0, puntaje:0, detalle:[] };
     renderQuestion();
   };
   document.getElementById('backLink').onclick = renderLanding;
@@ -396,6 +402,14 @@ function renderQuestion(){
     const isCorrect = chosenIndex === correct;
     const pts = isCorrect ? (100 + Math.round(50 * Math.max(remaining,0)/QTIME)) : 0;
     session.puntaje += pts;
+    const tiempoTardado = QTIME - Math.max(remaining,0); // segundos que tardó en responder
+    session.detalle.push({
+      pregunta: qData.q,
+      respuesta: chosenIndex !== null ? qData.opts[chosenIndex] : '(sin responder)',
+      correcta: isCorrect ? 'Sí' : 'No',
+      tiempo: tiempoTardado + 's',
+      puntos: pts
+    });
     setTimeout(()=>{
       if(session.qIndex < p.questions.length - 1){ session.qIndex += 1; renderQuestion(); }
       else{ finishSession(); }
@@ -405,7 +419,7 @@ function renderQuestion(){
 
 async function finishSession(){
   const p = PLANETS[currentPlanet];
-  await saveResponse(currentPlanet, { nombre: session.nombre, grupo: session.grupo, puntaje: session.puntaje, ts: Date.now() });
+  await saveResponse(currentPlanet, { nombre: session.nombre, grupo: session.grupo, puntaje: session.puntaje, ts: Date.now(), detalle: session.detalle });
   const max = p.questions.length * 150;
   let msg = "¡Buen trabajo, viajero!";
   if(session.puntaje >= max*0.8) msg = "¡Increíble! Dominas este planeta.";
